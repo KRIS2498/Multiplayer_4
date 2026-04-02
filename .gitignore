@@ -1,0 +1,20 @@
+# Unity
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Logs/
+/UserSettings/
+
+# Burst cache
+/Library/BurstCache/
+
+# Large binaries (если точно не нужны)
+*.dylib
+*.so
+*.dll
+*.exe
+
+# Package Cache (ваш случай!)
+/PackageCache/
+/Library/PackageCache/
