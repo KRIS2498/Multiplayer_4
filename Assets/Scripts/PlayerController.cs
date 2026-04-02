@@ -13,7 +13,7 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float _mouseSensitivity = 2f;
     [SerializeField] private float _maxLookAngle = 80f;
 
-    [Header("Input Actions (перетащите .inputactions файл)")]
+    [Header("Input Actions")]
     [SerializeField] private InputActionAsset _inputActions;
 
     [Header("Компоненты")]
@@ -94,14 +94,9 @@ public class PlayerController : NetworkBehaviour
         if (!IsOwner) return;
         if (_actionMap == null) return;
 
-        // Читаем ввод
         _moveInput = _moveAction.ReadValue<Vector2>();
         _lookInput = _lookAction.ReadValue<Vector2>();
         _isRunning = _runAction.IsPressed();
-
-        // Отладка - раскомментируйте для проверки
-        // if (_moveInput != Vector2.zero)
-        //     Debug.Log($"Move: {_moveInput}, Run: {_isRunning}");
 
         HandleMovement();
         HandleMouseLook();
@@ -135,7 +130,7 @@ public class PlayerController : NetworkBehaviour
         // Поворот по горизонтали
         transform.Rotate(Vector3.up * mouseX);
 
-        // Поворот по вертикали (ограниченный)
+        // Поворот по вертикали
         _verticalRotation -= mouseY;
         _verticalRotation = Mathf.Clamp(_verticalRotation, -_maxLookAngle, _maxLookAngle);
         _playerCamera.transform.localRotation = Quaternion.Euler(_verticalRotation, 0f, 0f);

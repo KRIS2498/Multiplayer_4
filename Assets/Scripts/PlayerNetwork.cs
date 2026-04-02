@@ -19,7 +19,7 @@ public class PlayerNetwork : NetworkBehaviour
     );
 
     [Header("UI References")]
-    [SerializeField] private TextMeshPro _nicknameText; // 3D текст над головой
+    [SerializeField] private TextMeshPro _nicknameText;
     [SerializeField] private TextMeshPro _hpText;
 
     [Header("Settings")]
@@ -27,7 +27,7 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void Start()
     {
-        // Если текст не назначен, попробуем найти дочерние объекты
+        // Если текст не назначен
         if (_nicknameText == null)
             _nicknameText = GetComponentInChildren<TextMeshPro>();
 
@@ -44,7 +44,6 @@ public class PlayerNetwork : NetworkBehaviour
             SubmitNicknameServerRpc(ConnectionUI.PlayerNickname);
         }
 
-        // Принудительно обновляем UI при спавне
         UpdateNicknameUI(Nickname.Value);
         UpdateHPUI(HP.Value);
     }
@@ -70,10 +69,8 @@ public class PlayerNetwork : NetworkBehaviour
     {
         UpdateHPUI(newValue);
 
-        // Дополнительно: эффект при получении урона
         if (newValue < oldValue && IsOwner)
         {
-            // Визуальный эффект для владельца (можно добавить)
             Debug.Log($"You took {oldValue - newValue} damage! HP: {newValue}");
         }
     }
@@ -94,7 +91,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
-    // Метод для нанесения урона (вызывается с сервера)
+    // Метод для нанесения урона
     [ServerRpc(RequireOwnership = false)]
     public void TakeDamageServerRpc(int damage)
     {

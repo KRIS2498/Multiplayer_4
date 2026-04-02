@@ -7,16 +7,12 @@ public class PlayerView : NetworkBehaviour
 {
     [Header("References")]
     [SerializeField] private PlayerNetwork _playerNetwork;
-    [SerializeField] private TextMeshPro _nicknameText;  // 3D текст над головой
-    [SerializeField] private TextMeshPro _hpText;       // 3D текст над головой
-
-    [Header("Optional - Canvas UI")]
-    [SerializeField] private TMP_Text _uiNicknameText;  // Если нужен UI Canvas
-    [SerializeField] private TMP_Text _uiHpText;        // Если нужен UI Canvas
+    [SerializeField] private TextMeshPro _nicknameText;
+    [SerializeField] private TextMeshPro _hpText;
 
     public override void OnNetworkSpawn()
     {
-        // Ищем PlayerNetwork если не назначен
+        // Ищем PlayerNetwork
         if (_playerNetwork == null)
         {
             _playerNetwork = GetComponent<PlayerNetwork>();
@@ -55,10 +51,6 @@ public class PlayerView : NetworkBehaviour
         // Обновляем 3D текст
         if (_nicknameText != null)
             _nicknameText.text = nickname;
-
-        // Обновляем UI Canvas текст (если используется)
-        if (_uiNicknameText != null)
-            _uiNicknameText.text = nickname;
     }
 
     private void OnHpChanged(int oldValue, int newValue)
@@ -68,10 +60,6 @@ public class PlayerView : NetworkBehaviour
         // Обновляем 3D текст
         if (_hpText != null)
             _hpText.text = hpText;
-
-        // Обновляем UI Canvas текст (если используется)
-        if (_uiHpText != null)
-            _uiHpText.text = hpText;
 
         // Дополнительно: меняем цвет при низком HP
         if (_hpText != null)
