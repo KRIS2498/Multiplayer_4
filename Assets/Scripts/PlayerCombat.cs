@@ -9,7 +9,7 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private float _attackRange = 2f;
     [SerializeField] private float _attackCooldown = 1f;
 
-    [Header("Input Actions (перетащите .inputactions файл)")]
+    [Header("Input Actions")]
     [SerializeField] private InputActionAsset _inputActions;
 
     [Header("References")]
@@ -41,8 +41,6 @@ public class PlayerCombat : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         if (!IsOwner) return;
-
-        // Настраиваем Input Actions
         SetupInputActions();
     }
 
@@ -50,14 +48,12 @@ public class PlayerCombat : NetworkBehaviour
     {
         if (_inputActions == null)
         {
-            Debug.LogError("Input Actions не назначен в инспекторе! Перетащите .inputactions файл.");
             return;
         }
 
         _actionMap = _inputActions.FindActionMap("Player");
         if (_actionMap == null)
         {
-            Debug.LogError("Action Map 'Player' не найден!");
             return;
         }
 
@@ -65,15 +61,12 @@ public class PlayerCombat : NetworkBehaviour
         _attackAction = _actionMap.FindAction("Attack");
         if (_attackAction == null)
         {
-            Debug.LogError("Action 'Attack' не найден в Action Map! Добавьте его в Input Actions.");
             return;
         }
 
         // Подписываемся на событие атаки
         _attackAction.performed += OnAttack;
         _attackAction.Enable();
-
-        Debug.Log("PlayerCombat: Input Actions настроены");
     }
 
     private void OnAttack(InputAction.CallbackContext context)
@@ -96,12 +89,6 @@ public class PlayerCombat : NetworkBehaviour
 
             _canAttack = false;
             Invoke(nameof(ResetAttack), _attackCooldown);
-
-            Debug.Log($"Атакован игрок {target.Nickname.Value}");
-        }
-        else
-        {
-            Debug.Log("Нет цели в радиусе атаки");
         }
     }
 

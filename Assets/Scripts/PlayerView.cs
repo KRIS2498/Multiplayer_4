@@ -18,7 +18,6 @@ public class PlayerView : NetworkBehaviour
             _playerNetwork = GetComponent<PlayerNetwork>();
             if (_playerNetwork == null)
             {
-                Debug.LogError("PlayerNetwork не найден на объекте!");
                 return;
             }
         }
@@ -30,8 +29,6 @@ public class PlayerView : NetworkBehaviour
         // Сразу отображаем текущие значения
         OnNicknameChanged(default, _playerNetwork.Nickname.Value);
         OnHpChanged(0, _playerNetwork.HP.Value);
-
-        Debug.Log($"PlayerView инициализирован для {(_playerNetwork.Nickname.Value.IsEmpty ? "unnamed" : _playerNetwork.Nickname.Value.ToString())}");
     }
 
     public override void OnNetworkDespawn()
@@ -61,7 +58,7 @@ public class PlayerView : NetworkBehaviour
         if (_hpText != null)
             _hpText.text = hpText;
 
-        // Дополнительно: меняем цвет при низком HP
+        // Меняем цвет при низком HP
         if (_hpText != null)
         {
             if (newValue <= 30)

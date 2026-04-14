@@ -5,6 +5,8 @@ using UnityEngine;
 public class ConnectionUI : MonoBehaviour
 {
     [SerializeField] private TMP_InputField _nicknameInput;
+    [SerializeField] private Camera _menuCamera;
+    [SerializeField] private GameObject _menuPanel;
 
     // Сохраняем ник локально до появления сетевого объекта игрока.
     public static string PlayerNickname { get; private set; } = "Player";
@@ -12,19 +14,31 @@ public class ConnectionUI : MonoBehaviour
     public void StartAsHost()
     {
         SaveNickname();
+        if (NetworkManager.Singleton != null)
+        {
+            DontDestroyOnLoad(NetworkManager.Singleton.gameObject);
+        }
+        if (_menuCamera != null)
+            _menuCamera.gameObject.SetActive(false);
         // Хост одновременно является сервером и клиентом.
         NetworkManager.Singleton.StartHost();
         // Отключаем меню после запуска
-        gameObject.SetActive(false);
+        _menuPanel.SetActive(false);
     }
 
     public void StartAsClient()
     {
         SaveNickname();
-        // Клиент только подключается к уже запущенному хосту/серверу.
+        if (NetworkManager.Singleton != null)
+        {
+            DontDestroyOnLoad(NetworkManager.Singleton.gameObject);
+        }
+        if (_menuCamera != null)
+            _menuCamera.gameObject.SetActive(false);
+        // Клиент только подключается к уже запущенному хосту.
         NetworkManager.Singleton.StartClient();
         // Отключаем меню после запуска
-        gameObject.SetActive(false);
+        _menuPanel.SetActive(false);
     }
 
     private void SaveNickname()
