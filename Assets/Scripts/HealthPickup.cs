@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class HealthPickup : NetworkBehaviour
@@ -19,28 +19,22 @@ public class HealthPickup : NetworkBehaviour
     private void OnTriggerEnter(Collider other)
     {
         // Только сервер обрабатывает подбор
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
 
         // Проверяем, что это игрок
-        PlayerNetwork player = other.GetComponent<PlayerNetwork>();
-        if (player == null) return;
+        if (!other.TryGetComponent<PlayerNetwork>(out PlayerNetwork player)) return;
 
-        // Мёртвый игрок не подбирает аптечки
-        if (!player.IsAlive.Value)
-        {
-            return;
-        }
+        // Мёртвый игрок не подбирает аптечки (используем .Value)
+        if (!player.IsAlive.Value) return;
 
-        // Не лечить при полном HP
-        if (player.HP.Value >= 100)
-        {
-            return;
-        }
+        // Не лечить при полном HP (используем .Value)
+        if (player.HP.Value >= 100) return;
 
         // Лечим игрока
         int newHP = Mathf.Min(100, player.HP.Value + _healAmount);
-        player.HP.Value = newHP;
 
+        // Присваиваем через .Value
+        player.HP.Value = newHP;
 
         // Эффект подбора
         if (_pickupEffectPrefab != null)
@@ -48,7 +42,7 @@ public class HealthPickup : NetworkBehaviour
             GameObject effect = Instantiate(_pickupEffectPrefab, transform.position, Quaternion.identity);
             NetworkObject effectNetwork = effect.GetComponent<NetworkObject>();
             if (effectNetwork != null)
-                effectNetwork.Spawn();
+                base.Spawn(effectNetwork);
             else
                 Destroy(effect, 2f);
         }
@@ -60,6 +54,6 @@ public class HealthPickup : NetworkBehaviour
         }
 
         // Уничтожаем аптечку
-        NetworkObject.Despawn(true);
+        base.Despawn();
     }
 }

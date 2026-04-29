@@ -1,30 +1,15 @@
-using Unity.Collections;
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 using TMPro;
 using System.Collections;
-using Unity.Netcode.Components;
 
 public class PlayerNetwork : NetworkBehaviour
 {
     [Header("Network Stats")]
-    public NetworkVariable<FixedString32Bytes> Nickname = new(
-        default,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    public NetworkVariable<int> HP = new(
-        100,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    public NetworkVariable<bool> IsAlive = new(
-        true,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    public readonly SyncVar<string> Nickname = new("Player");
+    public readonly SyncVar<int> HP = new(100);
+    public readonly SyncVar<bool> IsAlive = new(true);
 
     [Header("UI World Space")]
     [SerializeField] private TextMeshPro _nicknameText;
@@ -34,19 +19,9 @@ public class PlayerNetwork : NetworkBehaviour
     private TextMeshProUGUI _healthScreenText;
     private TextMeshProUGUI _ammoScreenText;
 
-    [Header("Combat Settings")]
-    [SerializeField] private GameObject _projectilePrefab;
-    [SerializeField] private Transform _firePoint;
-    [SerializeField] private float _shootCooldown = 0.4f;
-    [SerializeField] private int _maxAmmo = 10;
-    [SerializeField] private int _reloadTime = 2;
-
-    private float _lastShotTime;
-    private NetworkVariable<int> _currentAmmo = new NetworkVariable<int>(10);
-    private NetworkVariable<bool> _isReloading = new NetworkVariable<bool>(false);
-    private Coroutine _reloadCoroutine;
-
-    // UI для таймера респавна
+    // Ссылка на скрипт стрельбы для подписки
+    private PlayerShooting _playerShooting;
+    
     private GameObject _respawnPanel;
     private TextMeshProUGUI _respawnText;
     private Coroutine _respawnTimerCoroutine;
@@ -56,22 +31,18 @@ public class PlayerNetwork : NetworkBehaviour
         if (_nicknameText == null)
             _nicknameText = GetComponentInChildren<TextMeshPro>();
 
-        Nickname.OnValueChanged += OnNicknameChanged;
-        HP.OnValueChanged += OnHpChanged;
-        IsAlive.OnValueChanged += OnIsAliveChanged;
-        _currentAmmo.OnValueChanged += OnAmmoChanged;
-        _isReloading.OnValueChanged += OnReloadingChanged;
-
-        // Находим UI для таймера респавна
         FindRespawnPanel();
+
+        Nickname.OnChange += OnNicknameChanged;
+        HP.OnChange += OnHpChanged;
+        IsAlive.OnChange += OnIsAliveChanged;
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
         FindScreenUI();
 
-        // Показываем UI
-        if (IsOwner)
+        if (base.Owner.IsLocalClient)
         {
             SubmitNicknameServerRpc(ConnectionUI.PlayerNickname);
 
@@ -84,49 +55,35 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateNicknameUI(Nickname.Value);
         UpdateHPUI(HP.Value);
         UpdateHealthScreenUI(HP.Value);
-        UpdateAmmoScreenUI(_currentAmmo.Value, _maxAmmo);
-
-        if (IsOwner && _firePoint == null)
+        
+        // Подписываемся на события из PlayerShooting
+        _playerShooting = GetComponent<PlayerShooting>();
+        if (_playerShooting != null && base.Owner.IsLocalClient)
         {
-            GameObject firePointObj = new GameObject("FirePoint");
-            firePointObj.transform.SetParent(transform);
-            firePointObj.transform.localPosition = new Vector3(0, 1.5f, 0.8f);
-            _firePoint = firePointObj.transform;
+            _playerShooting.OnAmmoChanged += UpdateAmmoScreenUI;
+            _playerShooting.OnReloadingChanged += OnReloadingChanged;
         }
     }
 
     private void FindScreenUI()
     {
-        if (_healthScreenText != null && _ammoScreenText != null)
-        {
-            return;
-        }
+        if (_healthScreenText != null && _ammoScreenText != null) return;
 
-        // Ищем Canvas в сцене
         Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            return;
-        }
+        if (canvas == null) return;
 
-        // Ищем HealthText
         if (_healthScreenText == null)
         {
             Transform healthTransform = canvas.transform.Find("HealthText");
             if (healthTransform != null)
-            {
                 _healthScreenText = healthTransform.GetComponent<TextMeshProUGUI>();
-            }
         }
 
-        // Ищем AmmoText
         if (_ammoScreenText == null)
         {
             Transform ammoTransform = canvas.transform.Find("AmmoText");
             if (ammoTransform != null)
-            {
                 _ammoScreenText = ammoTransform.GetComponent<TextMeshProUGUI>();
-            }
         }
     }
 
@@ -152,41 +109,31 @@ public class PlayerNetwork : NetworkBehaviour
         {
             _respawnPanel.SetActive(true);
             if (_respawnText != null)
-            {
                 _respawnText.text = $"RESPAWN IN: {secondsRemaining}s";
-            }
         }
     }
 
     private void HideRespawnTimer()
     {
         if (_respawnPanel != null)
-        {
             _respawnPanel.SetActive(false);
-        }
     }
 
     private void UpdateHealthScreenUI(int health)
     {
-        if (_healthScreenText != null && IsOwner)
+        if (_healthScreenText != null && base.Owner.IsLocalClient)
         {
             _healthScreenText.text = $"HEALTH: {health}";
-
-            if (health <= 30)
-                _healthScreenText.color = Color.red;
-            else if (health <= 60)
-                _healthScreenText.color = Color.yellow;
-            else
-                _healthScreenText.color = Color.white;
+            _healthScreenText.color = health <= 30 ? Color.red : (health <= 60 ? Color.yellow : Color.white);
         }
     }
 
     private void UpdateAmmoScreenUI(int currentAmmo, int maxAmmo)
     {
-        if (_ammoScreenText != null && IsOwner)
+        if (_ammoScreenText != null && base.Owner.IsLocalClient)
         {
             _ammoScreenText.text = $"AMMO: {currentAmmo}/{maxAmmo}";
-
+            
             if (currentAmmo <= 3)
                 _ammoScreenText.color = Color.red;
             else if (currentAmmo <= 6)
@@ -196,39 +143,41 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    private void OnReloadingChanged(bool isReloading)
+    {
+        if (_ammoScreenText != null && base.Owner.IsLocalClient && isReloading)
+        {
+            _ammoScreenText.text = $"RELOADING...";
+            _ammoScreenText.color = Color.yellow;
+        }
+    }
+
     [ServerRpc(RequireOwnership = false)]
     private void SubmitNicknameServerRpc(string nickname)
     {
-        string safeValue = string.IsNullOrWhiteSpace(nickname)
-            ? $"Player_{OwnerClientId}"
+        string safeValue = string.IsNullOrWhiteSpace(nickname) 
+            ? $"Player_{base.Owner.ClientId}" 
             : nickname.Trim();
-
         Nickname.Value = safeValue;
-        Debug.Log($"Player {OwnerClientId} set nickname: {safeValue}");
+        Debug.Log($"Player {base.Owner.ClientId} set nickname: {safeValue}");
     }
 
-    private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
+    private void OnNicknameChanged(string oldValue, string newValue, bool asServer)
     {
         UpdateNicknameUI(newValue);
     }
 
-    private void OnHpChanged(int oldValue, int newValue)
+    private void OnHpChanged(int oldValue, int newValue, bool asServer)
     {
         UpdateHPUI(newValue);
 
-        // Обновляем UI только для владельца
-        if (IsOwner)
-        {
+        if (base.Owner.IsLocalClient)
             UpdateHealthScreenUI(newValue);
-        }
 
-        if (newValue < oldValue && IsOwner)
-        {
+        if (newValue < oldValue && base.Owner.IsLocalClient)
             StartCoroutine(DamageFlashEffect());
-        }
 
-        // Сервер обрабатывает смерть
-        if (IsServer && newValue <= 0 && IsAlive.Value)
+        if (base.IsServerInitialized && newValue <= 0 && IsAlive.Value)
         {
             IsAlive.Value = false;
             StartCoroutine(RespawnRoutine());
@@ -237,90 +186,45 @@ public class PlayerNetwork : NetworkBehaviour
 
     private IEnumerator RespawnRoutine()
     {
-
         yield return new WaitForSeconds(3f);
 
-        if (!IsServer) yield break;
+        if (!base.IsServerInitialized) yield break;
 
-        // Находим все точки спавна
         Transform[] spawnPoints = FindSpawnPoints();
-        Vector3 respawnPosition;
+        Vector3 respawnPosition = spawnPoints.Length > 0 
+            ? spawnPoints[Random.Range(0, spawnPoints.Length)].position 
+            : new Vector3(0, 1, 0);
 
-        if (spawnPoints.Length > 0)
-        {
-            int idx = Random.Range(0, spawnPoints.Length);
-            respawnPosition = spawnPoints[idx].position;
-        }
-        else
-        {
-            respawnPosition = new Vector3(0, 1, 0);
-        }
-
-        // Отключаем CharacterController перед телепортацией
         CharacterController cc = GetComponent<CharacterController>();
-        if (cc != null)
-        {
-            cc.enabled = false;
-        }
+        if (cc != null) cc.enabled = false;
 
-        // Телепортируем игрока
         transform.position = respawnPosition;
 
-        // Синхронизируем позицию для NetworkTransform
-        NetworkTransform networkTransform = GetComponent<NetworkTransform>();
-        if (networkTransform != null)
-        {
-            // Обновляем позицию в сети
-            networkTransform.SetState(transform.position, transform.rotation, transform.localScale);
-        }
+        if (cc != null) cc.enabled = true;
+        if (cc != null) cc.Move(Vector3.zero);
 
-        // Включаем CharacterController обратно
-        if (cc != null)
-        {
-            cc.enabled = true;
-        }
-
-        // Сбрасываем скорость и гравитацию
-        if (cc != null)
-        {
-            cc.Move(Vector3.zero);
-        }
-
-        // Восстанавливаем характеристики
         HP.Value = 100;
-        _currentAmmo.Value = _maxAmmo;
-        _isReloading.Value = false;
         IsAlive.Value = true;
 
-        UpdatePositionClientRpc(respawnPosition);
+        UpdatePositionObserversRpc(respawnPosition);
     }
 
-    [ClientRpc]
-    private void UpdatePositionClientRpc(Vector3 newPosition)
+    [ObserversRpc]
+    private void UpdatePositionObserversRpc(Vector3 newPosition)
     {
-        // Принудительно обновляем позицию на клиентах
-        if (!IsServer)
+        if (!base.IsServerInitialized)
         {
             CharacterController cc = GetComponent<CharacterController>();
-            if (cc != null)
-            {
-                cc.enabled = false;
-                transform.position = newPosition;
-                cc.enabled = true;
-            }
-            else
-            {
-                transform.position = newPosition;
-            }
+            if (cc != null) cc.enabled = false;
+            transform.position = newPosition;
+            if (cc != null) cc.enabled = true;
         }
     }
 
-    private void OnIsAliveChanged(bool oldValue, bool newValue)
+    private void OnIsAliveChanged(bool oldValue, bool newValue, bool asServer)
     {
-
         if (!newValue)
         {
-            // Игрок умер
             SetPlayerVisible(false);
 
             Collider collider = GetComponent<Collider>();
@@ -329,14 +233,11 @@ public class PlayerNetwork : NetworkBehaviour
             CharacterController cc = GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
 
-            if (IsOwner)
-            {
+            if (base.Owner.IsLocalClient)
                 StartRespawnTimer();
-            }
         }
         else
         {
-            // Игрок возродился
             SetPlayerVisible(true);
 
             Collider collider = GetComponent<Collider>();
@@ -345,17 +246,14 @@ public class PlayerNetwork : NetworkBehaviour
             CharacterController cc = GetComponent<CharacterController>();
             if (cc != null) cc.enabled = true;
 
-            if (IsOwner)
-            {
+            if (base.Owner.IsLocalClient)
                 StopRespawnTimer();
-            }
         }
     }
 
     private void StartRespawnTimer()
     {
-        if (_respawnTimerCoroutine != null)
-            StopCoroutine(_respawnTimerCoroutine);
+        if (_respawnTimerCoroutine != null) StopCoroutine(_respawnTimerCoroutine);
         _respawnTimerCoroutine = StartCoroutine(RespawnTimerCoroutine());
     }
 
@@ -384,16 +282,10 @@ public class PlayerNetwork : NetworkBehaviour
     private void SetPlayerVisible(bool visible)
     {
         MeshRenderer[] renderers = GetComponentsInChildren<MeshRenderer>();
-        foreach (MeshRenderer renderer in renderers)
-        {
-            renderer.enabled = visible;
-        }
+        foreach (MeshRenderer renderer in renderers) renderer.enabled = visible;
 
         SkinnedMeshRenderer[] skinnedRenderers = GetComponentsInChildren<SkinnedMeshRenderer>();
-        foreach (SkinnedMeshRenderer renderer in skinnedRenderers)
-        {
-            renderer.enabled = visible;
-        }
+        foreach (SkinnedMeshRenderer renderer in skinnedRenderers) renderer.enabled = visible;
 
         if (_nicknameText != null) _nicknameText.enabled = visible;
         if (_hpText != null) _hpText.enabled = visible;
@@ -402,47 +294,16 @@ public class PlayerNetwork : NetworkBehaviour
     private Transform[] FindSpawnPoints()
     {
         GameObject[] spawnPointObjects = GameObject.FindGameObjectsWithTag("SpawnPoint");
-
-
         Transform[] spawnPoints = new Transform[spawnPointObjects.Length];
         for (int i = 0; i < spawnPointObjects.Length; i++)
-        {
             spawnPoints[i] = spawnPointObjects[i].transform;
-        }
-
         return spawnPoints;
     }
 
-    private void OnAmmoChanged(int oldValue, int newValue)
-    {
-        if (IsOwner)
-        {
-            UpdateAmmoScreenUI(newValue, _maxAmmo);
-        }
-    }
-
-    private void OnReloadingChanged(bool oldValue, bool newValue)
-    {
-        if (IsOwner && newValue == true)
-        {
-            if (_ammoScreenText != null)
-            {
-                _ammoScreenText.text = $"RELOADING...";
-                _ammoScreenText.color = Color.yellow;
-            }
-        }
-        else if (IsOwner && newValue == false && oldValue == true)
-        {
-            UpdateAmmoScreenUI(_currentAmmo.Value, _maxAmmo);
-        }
-    }
-
-    private void UpdateNicknameUI(FixedString32Bytes nickname)
+    private void UpdateNicknameUI(string nickname)
     {
         if (_nicknameText != null)
-        {
-            _nicknameText.text = nickname.ToString();
-        }
+            _nicknameText.text = nickname;
     }
 
     private void UpdateHPUI(int hp)
@@ -450,93 +311,18 @@ public class PlayerNetwork : NetworkBehaviour
         if (_hpText != null)
         {
             _hpText.text = $"HP: {hp}";
-
-            if (hp <= 30)
-                _hpText.color = Color.red;
-            else if (hp <= 60)
-                _hpText.color = Color.yellow;
-            else
-                _hpText.color = Color.green;
+            _hpText.color = hp <= 30 ? Color.red : (hp <= 60 ? Color.yellow : Color.green);
         }
     }
 
     [ServerRpc(RequireOwnership = false)]
-    public void TakeDamageServerRpc(int damage, ulong attackerId)
+    public void TakeDamageServerRpc(int damage, int attackerId)
     {
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
         if (!IsAlive.Value) return;
+        if (base.Owner.ClientId == attackerId) return;
 
-        // Не наносим урон самому себе
-        if (OwnerClientId == attackerId) return;
-
-        int newHP = HP.Value - damage;
-        HP.Value = Mathf.Max(0, newHP);
-    }
-
-    private void Update()
-    {
-        if (!IsOwner) return;
-
-        if (!IsAlive.Value) return;
-
-        if (Input.GetMouseButtonDown(1))
-        {
-            ShootServerRpc(_firePoint.position, _firePoint.forward);
-        }
-
-        if (Input.GetKeyDown(KeyCode.R) && !_isReloading.Value)
-        {
-            ReloadServerRpc();
-        }
-    }
-
-    [ServerRpc]
-    private void ShootServerRpc(Vector3 pos, Vector3 dir, ServerRpcParams rpcParams = default)
-    {
-        if (!IsAlive.Value) return;
-        if (HP.Value <= 0) return;
-        if (_currentAmmo.Value <= 0) return;
-        if (Time.time < _lastShotTime + _shootCooldown) return;
-        if (_isReloading.Value) return;
-
-        _lastShotTime = Time.time;
-        _currentAmmo.Value--;
-
-        if (_projectilePrefab != null)
-        {
-            GameObject projectile = Instantiate(_projectilePrefab, pos + dir * 1.2f, Quaternion.LookRotation(dir));
-            NetworkObject networkObject = projectile.GetComponent<NetworkObject>();
-            if (networkObject != null)
-            {
-                networkObject.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
-            }
-        }
-    }
-
-    [ServerRpc]
-    private void ReloadServerRpc(ServerRpcParams rpcParams = default)
-    {
-        if (!IsAlive.Value) return;
-        if (_isReloading.Value || _currentAmmo.Value == _maxAmmo) return;
-
-        if (_reloadCoroutine != null)
-            StopCoroutine(_reloadCoroutine);
-        _reloadCoroutine = StartCoroutine(ReloadCoroutine());
-    }
-
-    private IEnumerator ReloadCoroutine()
-    {
-        _isReloading.Value = true;
-
-        float elapsed = 0;
-        while (elapsed < _reloadTime)
-        {
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        _currentAmmo.Value = _maxAmmo;
-        _isReloading.Value = false;
+        HP.Value = Mathf.Max(0, HP.Value - damage);
     }
 
     private IEnumerator DamageFlashEffect()
@@ -560,15 +346,14 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void OnDestroy()
     {
-        if (Nickname != null)
-            Nickname.OnValueChanged -= OnNicknameChanged;
-        if (HP != null)
-            HP.OnValueChanged -= OnHpChanged;
-        if (IsAlive != null)
-            IsAlive.OnValueChanged -= OnIsAliveChanged;
-        if (_currentAmmo != null)
-            _currentAmmo.OnValueChanged -= OnAmmoChanged;
-        if (_isReloading != null)
-            _isReloading.OnValueChanged -= OnReloadingChanged;
+        Nickname.OnChange -= OnNicknameChanged;
+        HP.OnChange -= OnHpChanged;
+        IsAlive.OnChange -= OnIsAliveChanged;
+        
+        if (_playerShooting != null && base.Owner.IsLocalClient)
+        {
+            _playerShooting.OnAmmoChanged -= UpdateAmmoScreenUI;
+            _playerShooting.OnReloadingChanged -= OnReloadingChanged;
+        }
     }
 }

@@ -1,6 +1,5 @@
 using TMPro;
-using Unity.Collections;
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerView : NetworkBehaviour
@@ -10,60 +9,39 @@ public class PlayerView : NetworkBehaviour
     [SerializeField] private TextMeshPro _nicknameText;
     [SerializeField] private TextMeshPro _hpText;
 
-    public override void OnNetworkSpawn()
+    private void Start()
     {
-        // Ищем PlayerNetwork
         if (_playerNetwork == null)
         {
             _playerNetwork = GetComponent<PlayerNetwork>();
-            if (_playerNetwork == null)
-            {
-                return;
-            }
-        }
-
-        // Подписываемся на изменения сетевых переменных
-        _playerNetwork.Nickname.OnValueChanged += OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged += OnHpChanged;
-
-        // Сразу отображаем текущие значения
-        OnNicknameChanged(default, _playerNetwork.Nickname.Value);
-        OnHpChanged(0, _playerNetwork.HP.Value);
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        // Отписываемся от событий
-        if (_playerNetwork != null)
-        {
-            _playerNetwork.Nickname.OnValueChanged -= OnNicknameChanged;
-            _playerNetwork.HP.OnValueChanged -= OnHpChanged;
+            if (_playerNetwork == null) return;
         }
     }
 
-    private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
+    public override void OnStartNetwork()
     {
-        string nickname = newValue.ToString();
+        if (_playerNetwork == null) return;
 
-        // Обновляем 3D текст
+        // Используем .Value для доступа к SyncVar
+        UpdateNicknameUI(_playerNetwork.Nickname.Value);
+        UpdateHPUI(_playerNetwork.HP.Value);
+    }
+
+    private void UpdateNicknameUI(string nickname)
+    {
         if (_nicknameText != null)
             _nicknameText.text = nickname;
     }
 
-    private void OnHpChanged(int oldValue, int newValue)
+    private void UpdateHPUI(int hp)
     {
-        string hpText = $"HP: {newValue}";
-
-        // Обновляем 3D текст
-        if (_hpText != null)
-            _hpText.text = hpText;
-
-        // Меняем цвет при низком HP
         if (_hpText != null)
         {
-            if (newValue <= 30)
+            _hpText.text = $"HP: {hp}";
+
+            if (hp <= 30)
                 _hpText.color = Color.red;
-            else if (newValue <= 60)
+            else if (hp <= 60)
                 _hpText.color = Color.yellow;
             else
                 _hpText.color = Color.green;

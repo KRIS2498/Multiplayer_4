@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class Projectile : NetworkBehaviour
@@ -8,17 +8,22 @@ public class Projectile : NetworkBehaviour
     [SerializeField] private int _damage = 20;
     [SerializeField] private float _maxLifetime = 5f;
     [SerializeField] private LayerMask _hitLayers = -1;
+    [SerializeField] private float _ignoreOwnerTime = 0.2f; // Время игнорирования владельца
 
     private float _spawnTime;
     private Vector3 _lastPosition;
+    private float _spawnTimeReal;
+    private int _ownerId = -1;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
         _spawnTime = Time.time;
+        _spawnTimeReal = Time.time;
         _lastPosition = transform.position;
+        _ownerId = base.Owner.ClientId;
 
-        // Автоматически уничтожить снаряд через время
-        if (IsServer)
+        // Автоматически уничтожить снаряд через время (только на сервере)
+        if (base.IsServerInitialized)
         {
             Invoke(nameof(DestroyProjectile), _maxLifetime);
         }
@@ -26,7 +31,7 @@ public class Projectile : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
 
         Vector3 newPosition = transform.position + transform.forward * _speed * Time.deltaTime;
 
@@ -51,24 +56,43 @@ public class Projectile : NetworkBehaviour
 
     private void OnHit(Collider other)
     {
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
 
-        PlayerNetwork player = other.GetComponent<PlayerNetwork>();
-        if (player != null && player.OwnerClientId != OwnerClientId)
+        // Игнорируем владельца в течение короткого времени после выстрела
+        if (Time.time - _spawnTimeReal < _ignoreOwnerTime)
         {
-            // Передаём ID атакующего
-            player.TakeDamageServerRpc(_damage, OwnerClientId);
-            Debug.Log($"Projectile hit {player.Nickname.Value} for {_damage} damage!");
+            // Проверяем, является ли объект владельцем
+            PlayerNetwork potentialOwner = other.GetComponent<PlayerNetwork>();
+            if (potentialOwner != null && potentialOwner.Owner.ClientId == _ownerId)
+            {
+                Debug.Log("Игнорируем столкновение с владельцем");
+                return; // Пропускаем попадание в себя
+            }
         }
 
-        NetworkObject.Despawn(true);
+        // Проверяем, что попали в игрока
+        if (other.TryGetComponent<PlayerNetwork>(out PlayerNetwork player))
+        {
+            // Не наносим урон себе (дополнительная проверка)
+            if (player.Owner.ClientId != _ownerId)
+            {
+                player.TakeDamageServerRpc(_damage, _ownerId);
+                Debug.Log($"Projectile hit {player.Nickname.Value} for {_damage} damage!");
+                base.Despawn();
+            }
+        }
+        else
+        {
+            // Попадание в стену или другой объект
+            base.Despawn();
+        }
     }
 
     private void DestroyProjectile()
     {
-        if (NetworkObject != null && NetworkObject.IsSpawned)
+        if (base.IsSpawned)
         {
-            NetworkObject.Despawn(true);
+            base.Despawn();
         }
         else
         {
@@ -78,9 +102,8 @@ public class Projectile : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsServer) return;
-
-        if (NetworkObject == null || !NetworkObject.IsSpawned) return;
+        if (!base.IsServerInitialized) return;
+        if (!base.IsSpawned) return;
 
         OnHit(other);
     }

@@ -1,4 +1,5 @@
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Connection;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -38,9 +39,9 @@ public class PlayerCombat : NetworkBehaviour
         }
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if (!IsOwner) return;
+        if (!base.Owner.IsLocalClient) return;
         SetupInputActions();
     }
 
@@ -71,7 +72,7 @@ public class PlayerCombat : NetworkBehaviour
 
     private void OnAttack(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!base.IsOwner) return;
         if (!_canAttack) return;
 
         TryAttack();
@@ -85,7 +86,7 @@ public class PlayerCombat : NetworkBehaviour
 
         if (target != null)
         {
-            DealDamageServerRpc(target.NetworkObjectId, _damage);
+            DealDamageServerRpc(target.ObjectId, _damage);
 
             _canAttack = false;
             Invoke(nameof(ResetAttack), _attackCooldown);
@@ -121,9 +122,12 @@ public class PlayerCombat : NetworkBehaviour
     }
 
     [ServerRpc(RequireOwnership = false)]
-    private void DealDamageServerRpc(ulong targetObjectId, int damage)
+    private void DealDamageServerRpc(int targetObjectId, int damage)
     {
-        if (!NetworkManager.SpawnManager.SpawnedObjects.TryGetValue(targetObjectId, out NetworkObject targetObject))
+        if (!base.IsServerInitialized) return;
+
+        // Получаем объект цели по NetworkId через TryGetValue
+        if (!base.ServerManager.Objects.Spawned.TryGetValue(targetObjectId, out NetworkObject targetObject))
         {
             Debug.LogWarning("Цель не найдена!");
             return;
@@ -140,17 +144,17 @@ public class PlayerCombat : NetworkBehaviour
         int newHP = Mathf.Max(0, targetPlayer.HP.Value - damage);
         targetPlayer.HP.Value = newHP;
 
-        Debug.Log($"Игрок {targetPlayer.Nickname.Value} получил {damage} урона. Осталось HP: {newHP}");
+        Debug.Log($"Игрок {targetPlayer.Nickname} получил {damage} урона. Осталось HP: {newHP}");
 
         if (newHP == 0)
         {
-            Debug.Log($"Игрок {targetPlayer.Nickname.Value} погиб!");
+            Debug.Log($"Игрок {targetPlayer.Nickname} погиб!");
         }
     }
 
     private void OnDisable()
     {
-        if (_attackAction != null && IsOwner)
+        if (_attackAction != null && base.IsOwner)
         {
             _attackAction.performed -= OnAttack;
             _attackAction.Disable();

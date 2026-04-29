@@ -1,5 +1,7 @@
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
+using System.Collections;
 
 public class PlayerShooting : NetworkBehaviour
 {
@@ -11,26 +13,58 @@ public class PlayerShooting : NetworkBehaviour
     [SerializeField] private int _reloadTime = 2;
 
     private float _lastShotTime;
-    private NetworkVariable<int> _currentAmmo = new NetworkVariable<int>(10);
-    private NetworkVariable<bool> _isReloading = new NetworkVariable<bool>(false);
+    private bool _canShoot = true;
+    private float _shootDelayTimer = 0f;
+
+    public readonly SyncVar<int> _currentAmmo = new(10);
+    public readonly SyncVar<bool> _isReloading = new(false);
 
     private PlayerNetwork _playerNetwork;
+    private Coroutine _reloadCoroutine;
+
+    // События для UI в PlayerNetwork
+    public System.Action<int, int> OnAmmoChanged;
+    public System.Action<bool> OnReloadingChanged;
 
     private void Awake()
     {
         _playerNetwork = GetComponent<PlayerNetwork>();
+
+        if (_firePoint == null)
+        {
+            GameObject firePointObj = new GameObject("FirePoint");
+            firePointObj.transform.SetParent(transform);
+            firePointObj.transform.localPosition = new Vector3(0, 1.5f, 0.8f);
+            _firePoint = firePointObj.transform;
+        }
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if (IsOwner)
+        if (base.Owner.IsLocalClient)
         {
-            // Установка начального количества патронов
             SetMaxAmmoServerRpc(_maxAmmo);
         }
 
-        // Подписываемся на изменения
-        _currentAmmo.OnValueChanged += OnAmmoChanged;
+        // Подписываемся на изменения SyncVar
+        _currentAmmo.OnChange += OnAmmoChangedHandler;
+        _isReloading.OnChange += OnReloadingChangedHandler;
+
+        // Вызываем начальное состояние
+        OnAmmoChangedHandler(_currentAmmo.Value, _currentAmmo.Value, false);
+        OnReloadingChangedHandler(_isReloading.Value, _isReloading.Value, false);
+    }
+
+    private void OnAmmoChangedHandler(int oldValue, int newValue, bool asServer)
+    {
+        Debug.Log($"Ammo changed: {newValue}/{_maxAmmo}");
+        OnAmmoChanged?.Invoke(newValue, _maxAmmo);
+    }
+
+    private void OnReloadingChangedHandler(bool oldValue, bool newValue, bool asServer)
+    {
+        Debug.Log($"Reloading changed: {newValue}");
+        OnReloadingChanged?.Invoke(newValue);
     }
 
     [ServerRpc]
@@ -41,80 +75,71 @@ public class PlayerShooting : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsOwner) return;
+        if (!base.IsOwner) return;
 
-        // Стрельба
-        if (Input.GetButtonDown("Fire1"))
+        // Обновляем таймер кулдауна
+        if (!_canShoot)
+        {
+            _shootDelayTimer -= Time.deltaTime;
+            if (_shootDelayTimer <= 0f)
+            {
+                _canShoot = true;
+            }
+        }
+
+        if (_playerNetwork != null && !_playerNetwork.IsAlive.Value) return;
+
+        // Стрельба (ПКМ)
+        if (Input.GetMouseButtonDown(1) && _canShoot && !_isReloading.Value && _currentAmmo.Value > 0)
         {
             ShootServerRpc(_firePoint.position, _firePoint.forward);
+
+            _canShoot = false;
+            _shootDelayTimer = _cooldown;
         }
 
-        // Перезарядка
-        if (Input.GetKeyDown(KeyCode.R) && !_isReloading.Value)
+        // Перезарядка (R)
+        if (Input.GetKeyDown(KeyCode.R) && !_isReloading.Value && _currentAmmo.Value != _maxAmmo)
         {
             ReloadServerRpc();
-        }
-
-        // Отладка
-        if (Input.GetKeyDown(KeyCode.Keypad0))
-        {
-            Debug.Log($"Current ammo: {_currentAmmo.Value}");
         }
     }
 
     [ServerRpc]
-    private void ShootServerRpc(Vector3 pos, Vector3 dir, ServerRpcParams rpcParams = default)
+    private void ShootServerRpc(Vector3 pos, Vector3 dir)
     {
-        // Проверка на жизнь
-        if (_playerNetwork != null && _playerNetwork.HP.Value <= 0)
-        {
-            return;
-        }
+        if (_playerNetwork != null && _playerNetwork.HP.Value <= 0) return;
+        if (_currentAmmo.Value <= 0) return;
+        if (_isReloading.Value) return;
+        if (Time.time < _lastShotTime + _cooldown) return;
 
-        // Проверка патронов
-        if (_currentAmmo.Value <= 0)
-        {
-            return;
-        }
-
-        // Проверка кулдауна
-        if (Time.time < _lastShotTime + _cooldown)
-        {
-            return;
-        }
-
-        // Проверка перезарядки
-        if (_isReloading.Value)
-        {
-            return;
-        }
-
-        // Все проверки пройдены - стреляем
         _lastShotTime = Time.time;
         _currentAmmo.Value--;
 
-        // Спавним снаряд
         if (_projectilePrefab != null && _firePoint != null)
         {
-            GameObject projectile = Instantiate(_projectilePrefab, pos + dir * 1.2f, Quaternion.LookRotation(dir));
+            Vector3 spawnPosition = pos + dir * 0.5f;
+
+            GameObject projectile = Instantiate(_projectilePrefab, spawnPosition, Quaternion.LookRotation(dir));
             NetworkObject networkObject = projectile.GetComponent<NetworkObject>();
             if (networkObject != null)
             {
-                networkObject.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
+                base.Spawn(networkObject);
             }
         }
     }
 
     [ServerRpc]
-    private void ReloadServerRpc(ServerRpcParams rpcParams = default)
+    private void ReloadServerRpc()
     {
-        if (_isReloading.Value || _currentAmmo.Value == _maxAmmo)
-            return;
+        if (_isReloading.Value || _currentAmmo.Value == _maxAmmo) return;
 
-        StartCoroutine(ReloadCoroutine());
+        if (_reloadCoroutine != null)
+            StopCoroutine(_reloadCoroutine);
+        _reloadCoroutine = StartCoroutine(ReloadCoroutine());
     }
 
-    private System.Collections.IEnumerator ReloadCoroutine()
+    private IEnumerator ReloadCoroutine()
     {
         _isReloading.Value = true;
 
@@ -122,18 +147,5 @@ public class PlayerShooting : NetworkBehaviour
 
         _currentAmmo.Value = _maxAmmo;
         _isReloading.Value = false;
-    }
-
-    private void OnAmmoChanged(int oldValue, int newValue)
-    {
-        if (IsOwner)
-        {
-            Debug.Log($"Ammo: {newValue}/{_maxAmmo}");
-        }
-    }
-
-    public override void OnNetworkDespawn()
-    {
-        _currentAmmo.OnValueChanged -= OnAmmoChanged;
     }
 }

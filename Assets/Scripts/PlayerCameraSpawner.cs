@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerCameraSpawner : NetworkBehaviour
@@ -7,9 +7,9 @@ public class PlayerCameraSpawner : NetworkBehaviour
 
     private GameObject _localCamera;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if (IsOwner)
+        if (base.Owner.IsLocalClient)
         {
             // Спавним камеру только для владельца
             _localCamera = Instantiate(_cameraPrefab, transform.position, Quaternion.identity);
@@ -23,7 +23,7 @@ public class PlayerCameraSpawner : NetworkBehaviour
         }
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStopNetwork()
     {
         if (_localCamera != null)
             Destroy(_localCamera);

@@ -1,5 +1,6 @@
 using UnityEngine;
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Connection;
 using System.Collections;
 
 public class PickupManager : NetworkBehaviour
@@ -9,10 +10,10 @@ public class PickupManager : NetworkBehaviour
     [SerializeField] private Transform[] _spawnPoints;
     [SerializeField] private float _respawnDelay = 10f;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
         // Только сервер спавнит аптечки
-        if (!IsServer)
+        if (!base.IsServerInitialized)
         {
             enabled = false;
             return;
@@ -34,7 +35,7 @@ public class PickupManager : NetworkBehaviour
 
     public void OnPickedUp(Vector3 position)
     {
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
         StartCoroutine(RespawnAfterDelay(position));
     }
 
@@ -62,7 +63,7 @@ public class PickupManager : NetworkBehaviour
         NetworkObject networkObject = pickup.GetComponent<NetworkObject>();
         if (networkObject != null)
         {
-            networkObject.Spawn();
+            base.Spawn(networkObject);
         }
     }
 }
