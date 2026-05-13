@@ -121,10 +121,17 @@ public class PlayerShooting : NetworkBehaviour
             Vector3 spawnPosition = pos + dir * 0.5f;
 
             GameObject projectile = Instantiate(_projectilePrefab, spawnPosition, Quaternion.LookRotation(dir));
+
+            // ? КРИТИЧЕСКИ ВАЖНО: Передаём владельца при спавне снаряда!
             NetworkObject networkObject = projectile.GetComponent<NetworkObject>();
             if (networkObject != null)
             {
-                base.Spawn(networkObject);
+                base.Spawn(networkObject, base.Owner); // ? Добавлен base.Owner
+                Debug.Log($"[PlayerShooting] Projectile spawned with owner: {base.Owner.ClientId}");
+            }
+            else
+            {
+                Debug.LogError("[PlayerShooting] Projectile prefab missing NetworkObject component!");
             }
         }
     }
@@ -147,5 +154,18 @@ public class PlayerShooting : NetworkBehaviour
 
         _currentAmmo.Value = _maxAmmo;
         _isReloading.Value = false;
+    }
+
+    public void ResetAmmo()
+    {
+        if (!base.IsServerInitialized) return;
+
+        _currentAmmo.Value = _maxAmmo;
+        _isReloading.Value = false;
+
+        if (_reloadCoroutine != null)
+            StopCoroutine(_reloadCoroutine);
+
+        Debug.Log($"[PlayerShooting] Ammo reset to {_maxAmmo}");
     }
 }

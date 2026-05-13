@@ -2,11 +2,12 @@ using FishNet.Object;
 using FishNet.Connection;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections;
 
 public class PlayerCombat : NetworkBehaviour
 {
     [Header("Combat Settings")]
-    [SerializeField] private int _damage = 10;
+    [SerializeField] private int _damage = 20;
     [SerializeField] private float _attackRange = 2f;
     [SerializeField] private float _attackCooldown = 1f;
 
@@ -49,31 +50,35 @@ public class PlayerCombat : NetworkBehaviour
     {
         if (_inputActions == null)
         {
+            Debug.LogWarning("[PlayerCombat] InputActions not assigned!");
             return;
         }
 
         _actionMap = _inputActions.FindActionMap("Player");
         if (_actionMap == null)
         {
+            Debug.LogWarning("[PlayerCombat] Player action map not found!");
             return;
         }
 
-        // Находим Action для атаки
         _attackAction = _actionMap.FindAction("Attack");
         if (_attackAction == null)
         {
+            Debug.LogWarning("[PlayerCombat] Attack action not found!");
             return;
         }
 
-        // Подписываемся на событие атаки
         _attackAction.performed += OnAttack;
         _attackAction.Enable();
+
+        Debug.Log("[PlayerCombat] Attack input enabled!");
     }
 
     private void OnAttack(InputAction.CallbackContext context)
     {
         if (!base.IsOwner) return;
         if (!_canAttack) return;
+        if (_playerNetwork != null && !_playerNetwork.IsAlive.Value) return;
 
         TryAttack();
     }
@@ -86,11 +91,23 @@ public class PlayerCombat : NetworkBehaviour
 
         if (target != null)
         {
-            DealDamageServerRpc(target.ObjectId, _damage);
+            Debug.Log($"[PlayerCombat] Attacking {target.Nickname.Value}!");
+            
+            GameManager gm = FindObjectOfType<GameManager>();
+            if (gm != null)
+            {
+                gm.ServerApplyDamage(target.Owner.ClientId, _damage, base.Owner.ClientId);
+            }
 
             _canAttack = false;
-            Invoke(nameof(ResetAttack), _attackCooldown);
+            StartCoroutine(ResetAttackCoroutine());
         }
+    }
+
+    private IEnumerator ResetAttackCoroutine()
+    {
+        yield return new WaitForSeconds(_attackCooldown);
+        _canAttack = true;
     }
 
     private PlayerNetwork FindTarget()
@@ -103,6 +120,7 @@ public class PlayerCombat : NetworkBehaviour
         foreach (PlayerNetwork player in allPlayers)
         {
             if (player == _playerNetwork) continue;
+            if (!player.IsAlive.Value) continue; // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
 
             float distance = Vector3.Distance(transform.position, player.transform.position);
 
@@ -116,40 +134,41 @@ public class PlayerCombat : NetworkBehaviour
         return closestTarget;
     }
 
-    private void ResetAttack()
-    {
-        _canAttack = true;
-    }
-
     [ServerRpc(RequireOwnership = false)]
-    private void DealDamageServerRpc(int targetObjectId, int damage)
+    private void DealDamageServerRpc(int targetObjectId, int damage, int attackerId)
     {
+        Debug.Log($"[PlayerCombat] DealDamageServerRpc CALLED! TargetId={targetObjectId}, Damage={damage}, Attacker={attackerId}");
+
         if (!base.IsServerInitialized) return;
 
-        // Получаем объект цели по NetworkId через TryGetValue
         if (!base.ServerManager.Objects.Spawned.TryGetValue(targetObjectId, out NetworkObject targetObject))
         {
-            Debug.LogWarning("Цель не найдена!");
+            Debug.LogWarning("[PlayerCombat] Target not found in Spawned objects!");
             return;
         }
 
         PlayerNetwork targetPlayer = targetObject.GetComponent<PlayerNetwork>();
 
-        if (targetPlayer == null || targetPlayer == _playerNetwork)
+        if (targetPlayer == null)
         {
-            Debug.LogWarning("Нельзя атаковать себя!");
+            Debug.LogWarning("[PlayerCombat] Target has no PlayerNetwork component!");
             return;
         }
 
-        int newHP = Mathf.Max(0, targetPlayer.HP.Value - damage);
-        targetPlayer.HP.Value = newHP;
-
-        Debug.Log($"Игрок {targetPlayer.Nickname} получил {damage} урона. Осталось HP: {newHP}");
-
-        if (newHP == 0)
+        if (targetPlayer == _playerNetwork)
         {
-            Debug.Log($"Игрок {targetPlayer.Nickname} погиб!");
+            Debug.LogWarning("[PlayerCombat] Cannot attack self!");
+            return;
         }
+
+        if (!targetPlayer.IsAlive.Value)
+        {
+            Debug.Log($"[PlayerCombat] {targetPlayer.Nickname.Value} is already dead!");
+            return;
+        }
+
+        Debug.Log($"[PlayerCombat] Calling ServerApplyDamage on {targetPlayer.Nickname.Value}");
+        targetPlayer.ServerApplyDamage(damage, attackerId);
     }
 
     private void OnDisable()
@@ -164,6 +183,6 @@ public class PlayerCombat : NetworkBehaviour
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, _attackRange);
+        Gizmos.DrawWireSphere(_attackPoint != null ? _attackPoint.position : transform.position, _attackRange);
     }
 }

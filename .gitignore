@@ -6,6 +6,14 @@
 /Logs/
 /UserSettings/
 
+# Visual Studio / VS Code
+/.vs/
+/.vscode/
+*.csproj
+*.sln
+*.userprefs
+*.suo
+
 # Burst cache
 /Library/BurstCache/
 
@@ -15,6 +23,6 @@
 *.dll
 *.exe
 
-# Package Cache (ваш случай!)
+# Package Cache
 /PackageCache/
 /Library/PackageCache/

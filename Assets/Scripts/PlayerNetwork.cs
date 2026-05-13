@@ -19,12 +19,13 @@ public class PlayerNetwork : NetworkBehaviour
     private TextMeshProUGUI _healthScreenText;
     private TextMeshProUGUI _ammoScreenText;
 
-    // Ссылка на скрипт стрельбы для подписки
+    // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     private PlayerShooting _playerShooting;
     
     private GameObject _respawnPanel;
     private TextMeshProUGUI _respawnText;
     private Coroutine _respawnTimerCoroutine;
+    public readonly SyncVar<int> Score = new(0);
 
     private void Start()
     {
@@ -56,7 +57,7 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateHPUI(HP.Value);
         UpdateHealthScreenUI(HP.Value);
         
-        // Подписываемся на события из PlayerShooting
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ PlayerShooting
         _playerShooting = GetComponent<PlayerShooting>();
         if (_playerShooting != null && base.Owner.IsLocalClient)
         {
@@ -177,14 +178,26 @@ public class PlayerNetwork : NetworkBehaviour
         if (newValue < oldValue && base.Owner.IsLocalClient)
             StartCoroutine(DamageFlashEffect());
 
+        // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         if (base.IsServerInitialized && newValue <= 0 && IsAlive.Value)
         {
             IsAlive.Value = false;
+            Debug.Log($"Player {Nickname.Value} DIED! Killer: {_lastAttackerId}");
+
+            GameManager gm = FindObjectOfType<GameManager>();
+            if (gm != null && _lastAttackerId != -1)
+            {
+                gm.OnPlayerKilled(_lastAttackerId, base.Owner.ClientId);
+            }
+
             StartCoroutine(RespawnRoutine());
         }
     }
 
-    private IEnumerator RespawnRoutine()
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
+    private int _lastAttackerId = -1;
+
+    public IEnumerator RespawnRoutine()
     {
         yield return new WaitForSeconds(3f);
 
@@ -318,11 +331,30 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     public void TakeDamageServerRpc(int damage, int attackerId)
     {
-        if (!base.IsServerInitialized) return;
+        ApplyDamage(damage, attackerId);
+    }
+
+    public void ApplyDamage(int damage, int attackerId)
+    {
+        if (!base.IsServerInitialized) 
+        {
+            Debug.LogError("[PlayerNetwork] NOT SERVER!");
+            return;
+        }
         if (!IsAlive.Value) return;
         if (base.Owner.ClientId == attackerId) return;
 
-        HP.Value = Mathf.Max(0, HP.Value - damage);
+        _lastAttackerId = attackerId;
+        int newHp = Mathf.Max(0, HP.Value - damage);
+        HP.Value = newHp;
+
+        Debug.Log($"[PlayerNetwork] DMG! {Nickname.Value} HP: {newHp}");
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void ServerApplyDamage(int damage, int attackerId)
+    {
+        ApplyDamage(damage, attackerId);
     }
 
     private IEnumerator DamageFlashEffect()
