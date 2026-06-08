@@ -87,21 +87,56 @@ public class PlayerCombat : NetworkBehaviour
     {
         if (!_canAttack) return;
 
-        PlayerNetwork target = FindTarget();
+        PlayerNetwork playerTarget = FindTarget();
+        EnemyBase enemyTarget = FindEnemyTarget();
 
-        if (target != null)
+        if (playerTarget != null)
         {
-            Debug.Log($"[PlayerCombat] Attacking {target.Nickname.Value}!");
-            
-            GameManager gm = FindObjectOfType<GameManager>();
-            if (gm != null)
+            Debug.Log($"[PlayerCombat] Attacking {playerTarget.Nickname.Value}!");
+
+            TowerManager tower = TowerManager.Instance;
+            if (tower != null)
             {
-                gm.ServerApplyDamage(target.Owner.ClientId, _damage, base.Owner.ClientId);
+                tower.ServerApplyDamage(playerTarget.Owner.ClientId, _damage, base.Owner.ClientId);
+            }
+            else
+            {
+                GameManager gm = FindObjectOfType<GameManager>();
+                gm?.ServerApplyDamage(playerTarget.Owner.ClientId, _damage, base.Owner.ClientId);
             }
 
             _canAttack = false;
             StartCoroutine(ResetAttackCoroutine());
         }
+        else if (enemyTarget != null)
+        {
+            Debug.Log($"[PlayerCombat] Attacking enemy!");
+
+            enemyTarget.TakeDamage(_damage, base.Owner.ClientId);
+
+            _canAttack = false;
+            StartCoroutine(ResetAttackCoroutine());
+        }
+    }
+
+    private EnemyBase FindEnemyTarget()
+    {
+        EnemyBase[] allEnemies = FindObjectsOfType<EnemyBase>();
+
+        EnemyBase closest = null;
+        float closestDistance = _attackRange;
+
+        foreach (var enemy in allEnemies)
+        {
+            float distance = Vector3.Distance(transform.position, enemy.transform.position);
+            if (distance <= _attackRange && distance < closestDistance)
+            {
+                closestDistance = distance;
+                closest = enemy;
+            }
+        }
+
+        return closest;
     }
 
     private IEnumerator ResetAttackCoroutine()

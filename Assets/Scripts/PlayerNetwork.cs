@@ -6,6 +6,7 @@ using System.Collections;
 
 public class PlayerNetwork : NetworkBehaviour
 {
+    public static event System.Action<PlayerNetwork> OnAnyPlayerDied;
     [Header("Network Stats")]
     public readonly SyncVar<string> Nickname = new("Player");
     public readonly SyncVar<int> HP = new(100);
@@ -178,11 +179,12 @@ public class PlayerNetwork : NetworkBehaviour
         if (newValue < oldValue && base.Owner.IsLocalClient)
             StartCoroutine(DamageFlashEffect());
 
-        // ������ ��� ������
         if (base.IsServerInitialized && newValue <= 0 && IsAlive.Value)
         {
             IsAlive.Value = false;
             Debug.Log($"Player {Nickname.Value} DIED! Killer: {_lastAttackerId}");
+
+            OnAnyPlayerDied?.Invoke(this);
 
             GameManager gm = FindObjectOfType<GameManager>();
             if (gm != null && _lastAttackerId != -1)
@@ -190,7 +192,12 @@ public class PlayerNetwork : NetworkBehaviour
                 gm.OnPlayerKilled(_lastAttackerId, base.Owner.ClientId);
             }
 
-            StartCoroutine(RespawnRoutine());
+            TowerManager.Instance?.CheckAllPlayersDead();
+
+            if (TowerManager.Instance == null || TowerManager.Instance.CurrentState != TowerManager.TowerState.RunEnded)
+            {
+                StartCoroutine(RespawnRoutine());
+            }
         }
     }
 

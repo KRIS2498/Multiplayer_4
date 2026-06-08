@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 445ed138343f4d3469f54c785e693c3e, type: 3}
+  m_Name: TowerRoomDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::RoomDatabase
+  _rooms:
+  - Type: 0
+    Prefab: {fileID: 4902701930139611987, guid: 4656036687037d0488b227b22646b7eb, type: 3}
+    MinFloor: 1
+    MaxFloor: 50
+    Weight: 0.6

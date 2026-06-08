@@ -66,17 +66,33 @@ public class Projectile : NetworkBehaviour
         {
             if (player.Owner.ClientId != _ownerId && player.IsAlive.Value)
             {
-                GameManager gm = FindObjectOfType<GameManager>();
-                if (gm != null)
+                var tower = TowerManager.Instance;
+                if (tower != null)
                 {
-                    gm.ApplyDamageToPlayer(player.Owner.ClientId, _damage, _ownerId);
+                    tower.ServerApplyDamage(player.Owner.ClientId, _damage, _ownerId);
+                }
+                else
+                {
+                    GameManager gm = FindObjectOfType<GameManager>();
+                    if (gm != null)
+                        gm.ApplyDamageToPlayer(player.Owner.ClientId, _damage, _ownerId);
                 }
                 Destroy(gameObject);
             }
+            return;
         }
-        else
+
+        EnemyBase enemy = other.GetComponent<EnemyBase>();
+        if (enemy == null)
+            enemy = other.GetComponentInParent<EnemyBase>();
+
+        if (enemy != null)
         {
+            enemy.TakeDamage(_damage, _ownerId);
             Destroy(gameObject);
+            return;
         }
+
+        Destroy(gameObject);
     }
 }
