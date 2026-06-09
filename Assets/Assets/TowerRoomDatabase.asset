@@ -18,3 +18,8 @@ MonoBehaviour:
     MinFloor: 1
     MaxFloor: 999
     Weight: 1
+  - Type: 4
+    Prefab: {fileID: 2413292493480141898, guid: b082b3170548afc498f98bd416d5a212, type: 3}
+    MinFloor: 5
+    MaxFloor: 999
+    Weight: 1

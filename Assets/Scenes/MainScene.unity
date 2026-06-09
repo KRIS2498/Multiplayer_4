@@ -4785,7 +4785,6 @@ MonoBehaviour:
   _lobbyCountdownDuration: 10
   _maxBosses: 5
   _transitionDelay: 2
-  _floorSpacing: 25
   _floorTransitionUI: {fileID: 0}
   _runEndUI: {fileID: 0}
   _lobbyUI: {fileID: 0}

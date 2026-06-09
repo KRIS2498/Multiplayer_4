@@ -359,7 +359,7 @@ MonoBehaviour:
   - {fileID: 6544126861780000564}
   _exitDoorModel: {fileID: 6036423760216685765}
   _exitTrigger: {fileID: 3521732367192513531}
-  _totalEnemies: 20
+  _totalEnemies: 5
   _waveInterval: 5
   _enemyPrefabs:
   - {fileID: 2057675046558791185, guid: 7d3818bc5005a0849a786f36464e5007, type: 3}
@@ -3234,7 +3234,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7564636611156017616, guid: e7a79a14190d3d34f93236ba7164d734, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8378305016021551963, guid: e7a79a14190d3d34f93236ba7164d734, type: 3}
       propertyPath: m_LocalScale.x
