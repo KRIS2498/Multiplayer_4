@@ -10,6 +10,7 @@ public class PlayerShooting : NetworkBehaviour
     [SerializeField] private Transform _firePoint;
     [SerializeField] private float _cooldown = 0.4f;
     [SerializeField] private int _maxAmmo = 10;
+    public int MaxAmmo => _maxAmmo;
     [SerializeField] private int _reloadTime = 2;
 
     private float _lastShotTime;
@@ -22,7 +23,7 @@ public class PlayerShooting : NetworkBehaviour
     private PlayerNetwork _playerNetwork;
     private Coroutine _reloadCoroutine;
 
-    // События для UI в PlayerNetwork
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ UI пїЅ PlayerNetwork
     public System.Action<int, int> OnAmmoChanged;
     public System.Action<bool> OnReloadingChanged;
 
@@ -46,11 +47,11 @@ public class PlayerShooting : NetworkBehaviour
             SetMaxAmmoServerRpc(_maxAmmo);
         }
 
-        // Подписываемся на изменения SyncVar
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ SyncVar
         _currentAmmo.OnChange += OnAmmoChangedHandler;
         _isReloading.OnChange += OnReloadingChangedHandler;
 
-        // Вызываем начальное состояние
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         OnAmmoChangedHandler(_currentAmmo.Value, _currentAmmo.Value, false);
         OnReloadingChangedHandler(_isReloading.Value, _isReloading.Value, false);
     }
@@ -77,7 +78,7 @@ public class PlayerShooting : NetworkBehaviour
     {
         if (!base.IsOwner) return;
 
-        // Обновляем таймер кулдауна
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         if (!_canShoot)
         {
             _shootDelayTimer -= Time.deltaTime;
@@ -89,7 +90,7 @@ public class PlayerShooting : NetworkBehaviour
 
         if (_playerNetwork != null && !_playerNetwork.IsAlive.Value) return;
 
-        // Стрельба (ПКМ)
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ (пїЅпїЅпїЅ)
         if (Input.GetMouseButtonDown(1) && _canShoot && !_isReloading.Value && _currentAmmo.Value > 0)
         {
             ShootServerRpc(_firePoint.position, _firePoint.forward);
@@ -98,11 +99,7 @@ public class PlayerShooting : NetworkBehaviour
             _shootDelayTimer = _cooldown;
         }
 
-        // Перезарядка (R)
-        if (Input.GetKeyDown(KeyCode.R) && !_isReloading.Value && _currentAmmo.Value != _maxAmmo)
-        {
-            ReloadServerRpc();
-        }
+        // Reload by R disabled - ammo restores only via pickups
     }
 
     [ServerRpc]
@@ -122,11 +119,11 @@ public class PlayerShooting : NetworkBehaviour
 
             GameObject projectile = Instantiate(_projectilePrefab, spawnPosition, Quaternion.LookRotation(dir));
 
-            // ? КРИТИЧЕСКИ ВАЖНО: Передаём владельца при спавне снаряда!
+            // ? пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ!
             NetworkObject networkObject = projectile.GetComponent<NetworkObject>();
             if (networkObject != null)
             {
-                base.Spawn(networkObject, base.Owner); // ? Добавлен base.Owner
+                base.Spawn(networkObject, base.Owner); // ? пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ base.Owner
                 Debug.Log($"[PlayerShooting] Projectile spawned with owner: {base.Owner.ClientId}");
             }
             else

@@ -44,9 +44,14 @@ public class RoomDatabase : ScriptableObject
 
     public GameObject GetRandomNonBossRoom(int floor)
     {
-        var types = new[] { RoomType.Enemy, RoomType.Trap, RoomType.Puzzle, RoomType.Parkour };
-        var type = types[Random.Range(0, types.Length)];
-        return GetRandomRoom(type, floor);
+        var candidates = _rooms.FindAll(r =>
+            r.Type != RoomType.Boss &&
+            r.Prefab != null &&
+            floor >= r.MinFloor &&
+            floor <= r.MaxFloor);
+
+        if (candidates.Count == 0) return null;
+        return candidates[Random.Range(0, candidates.Count)].Prefab;
     }
 
     public GameObject GetRandomBossRoom(int floor)

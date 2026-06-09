@@ -58,9 +58,20 @@ public class GameManager : NetworkBehaviour
 
     #region Network Callbacks
 
+    private bool IsTowerMode => TowerManager.Instance != null;
+
+    private void Start()
+    {
+        if (IsTowerMode)
+            HideAllPanels();
+    }
+
     public override void OnStartServer()
     {
         base.OnStartServer();
+
+        if (IsTowerMode) return;
+
         base.ServerManager.OnRemoteConnectionState += OnPlayerConnectionChanged;
 
         _connectedPlayers.Value = base.ServerManager.Clients.Count;
@@ -76,6 +87,12 @@ public class GameManager : NetworkBehaviour
     public override void OnStartClient()
     {
         base.OnStartClient();
+
+        if (IsTowerMode)
+        {
+            HideAllPanels();
+            return;
+        }
 
         if (IsClient)
         {
@@ -482,8 +499,22 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    private void HideAllPanels()
+    {
+        if (_waitingPanel != null) _waitingPanel.SetActive(false);
+        if (_resultsPanel != null) _resultsPanel.SetActive(false);
+        if (_timerText != null) _timerText.text = "";
+        if (_gameTimerText != null) _gameTimerText.text = "";
+    }
+
     private void UpdateUIByState()
     {
+        if (IsTowerMode)
+        {
+            HideAllPanels();
+            return;
+        }
+
         switch (CurrentState)
         {
             case GameState.WaitingForPlayers:

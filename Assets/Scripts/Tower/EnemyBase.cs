@@ -1,4 +1,5 @@
 using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 
 public abstract class EnemyBase : NetworkBehaviour
@@ -8,29 +9,26 @@ public abstract class EnemyBase : NetworkBehaviour
     [SerializeField] protected int _damage = 10;
     [SerializeField] protected float _moveSpeed = 3f;
 
-    protected int _currentHP;
+    public readonly SyncVar<int> CurrentHP = new(30);
     protected int _currentDamage;
     protected float _currentSpeed;
+    public int MaxHP => _maxHP;
 
     public virtual void SetDifficulty(int hp, int damage, float speedMultiplier)
     {
+        _currentDamage = damage;
+        _currentSpeed = _moveSpeed * speedMultiplier;
         _maxHP = hp;
-        _damage = damage;
-        _moveSpeed *= speedMultiplier;
-
-        _currentHP = _maxHP;
-        _currentDamage = _damage;
-        _currentSpeed = _moveSpeed;
+        CurrentHP.Value = hp;
     }
 
     public virtual void TakeDamage(int amount, int attackerId)
     {
         if (!base.IsServerInitialized) return;
 
-        _currentHP -= amount;
-        Debug.Log($"[Enemy] Took {amount} damage, HP: {_currentHP}/{_maxHP}");
+        CurrentHP.Value -= amount;
 
-        if (_currentHP <= 0)
+        if (CurrentHP.Value <= 0)
         {
             Die(attackerId);
         }

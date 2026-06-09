@@ -1,5 +1,6 @@
 using FishNet.Object;
 using UnityEngine;
+using UnityEngine.UI;
 
 [RequireComponent(typeof(CharacterController))]
 public class SimpleEnemy : EnemyBase
@@ -8,6 +9,9 @@ public class SimpleEnemy : EnemyBase
     [SerializeField] private float _attackRange = 1.5f;
     [SerializeField] private float _attackCooldown = 1f;
 
+    [Header("HP Bar (назначь в префабе)")]
+    [SerializeField] private Slider _hpSlider;
+
     private CharacterController _controller;
     private Transform _target;
     private float _lastAttackTime;
@@ -15,21 +19,37 @@ public class SimpleEnemy : EnemyBase
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
-        _currentHP = _maxHP;
+        CurrentHP.Value = _maxHP;
     }
 
     public override void OnStartNetwork()
     {
         base.OnStartNetwork();
-        _currentHP = _maxHP;
+        CurrentHP.Value = _maxHP;
         _currentDamage = _damage;
         _currentSpeed = _moveSpeed;
+
+        CurrentHP.OnChange += OnHPChanged;
+        OnHPChanged(CurrentHP.Value, CurrentHP.Value, false);
+    }
+
+    private void OnDestroy()
+    {
+        CurrentHP.OnChange -= OnHPChanged;
+    }
+
+    private void OnHPChanged(int prev, int next, bool asServer)
+    {
+        if (_hpSlider == null) return;
+
+        float maxHP = _maxHP > 0 ? _maxHP : 1;
+        _hpSlider.value = (float)next / maxHP;
     }
 
     private void Update()
     {
         if (!base.IsServerInitialized) return;
-        if (_currentHP <= 0) return;
+        if (CurrentHP.Value <= 0) return;
 
         FindTarget();
         if (_target == null) return;
@@ -37,13 +57,9 @@ public class SimpleEnemy : EnemyBase
         float distance = Vector3.Distance(transform.position, _target.position);
 
         if (distance > _attackRange)
-        {
             ChaseTarget();
-        }
         else
-        {
             AttackTarget();
-        }
     }
 
     private void FindTarget()
@@ -72,18 +88,17 @@ public class SimpleEnemy : EnemyBase
         direction.y = 0;
 
         if (_controller.isGrounded)
-        {
             _controller.Move(direction * _currentSpeed * Time.deltaTime);
-        }
         else
-        {
             _controller.Move(direction * _currentSpeed * Time.deltaTime + Physics.gravity * Time.deltaTime);
-        }
 
-        transform.rotation = Quaternion.Slerp(
-            transform.rotation,
-            Quaternion.LookRotation(direction),
-            Time.deltaTime * 5f);
+        if (direction.sqrMagnitude > 0.01f)
+        {
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                Quaternion.LookRotation(direction),
+                Time.deltaTime * 5f);
+        }
     }
 
     private void AttackTarget()
@@ -96,25 +111,13 @@ public class SimpleEnemy : EnemyBase
         {
             TowerManager tower = TowerManager.Instance;
             if (tower != null)
-            {
                 tower.ServerApplyDamage(player.Owner.ClientId, _currentDamage, -1);
-            }
-            else
-            {
-                player.ApplyDamage(_currentDamage, -1);
-            }
         }
     }
 
     public override void TakeDamage(int amount, int attackerId)
     {
         base.TakeDamage(amount, attackerId);
-
-        TowerManager tower = TowerManager.Instance;
-        if (tower != null)
-        {
-            tower.ServerApplyDamage(attackerId, 0, attackerId);
-        }
     }
 
     private void OnDrawGizmosSelected()

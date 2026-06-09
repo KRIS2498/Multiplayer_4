@@ -210,10 +210,14 @@ public class PlayerNetwork : NetworkBehaviour
 
         if (!base.IsServerInitialized) yield break;
 
-        Transform[] spawnPoints = FindSpawnPoints();
-        Vector3 respawnPosition = spawnPoints.Length > 0 
-            ? spawnPoints[Random.Range(0, spawnPoints.Length)].position 
-            : new Vector3(0, 1, 0);
+        if (TowerManager.Instance != null &&
+            (TowerManager.Instance.CurrentState == TowerManager.TowerState.RunEnded ||
+             TowerManager.Instance.CurrentState == TowerManager.TowerState.RunVictory))
+        {
+            yield break;
+        }
+
+        Vector3 respawnPosition = GetRespawnPosition();
 
         CharacterController cc = GetComponent<CharacterController>();
         if (cc != null) cc.enabled = false;
@@ -227,6 +231,26 @@ public class PlayerNetwork : NetworkBehaviour
         IsAlive.Value = true;
 
         UpdatePositionObserversRpc(respawnPosition);
+    }
+
+    private Vector3 GetRespawnPosition()
+    {
+        TowerManager tower = TowerManager.Instance;
+        if (tower != null && tower.CurrentRoom != null)
+        {
+            Transform[] roomSpawns = tower.CurrentRoom.PlayerSpawnPoints;
+            if (roomSpawns != null && roomSpawns.Length > 0)
+            {
+                int index = Random.Range(0, roomSpawns.Length);
+                return roomSpawns[index].position;
+            }
+        }
+
+        Transform[] spawnPoints = FindSpawnPoints();
+        if (spawnPoints.Length > 0)
+            return spawnPoints[Random.Range(0, spawnPoints.Length)].position;
+
+        return new Vector3(0, 1, 0);
     }
 
     [ObserversRpc]

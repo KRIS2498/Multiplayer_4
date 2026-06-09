@@ -2,13 +2,13 @@ using UnityEngine;
 
 public class DifficultyManager : MonoBehaviour
 {
-    [Header("Difficulty Curve")]
-    [SerializeField] private AnimationCurve _hpMultiplier = AnimationCurve.Linear(0, 1f, 50, 5f);
-    [SerializeField] private AnimationCurve _damageMultiplier = AnimationCurve.Linear(0, 1f, 50, 3f);
-    [SerializeField] private AnimationCurve _speedMultiplier = AnimationCurve.Linear(0, 1f, 50, 1.5f);
-    [SerializeField] private AnimationCurve _spawnCountMultiplier = AnimationCurve.Linear(0, 1f, 50, 3f);
+    [Header("Difficulty Curves")]
+    [SerializeField] private AnimationCurve _hpMultiplier = AnimationCurve.Linear(1, 1f, 20, 4f);
+    [SerializeField] private AnimationCurve _damageMultiplier = AnimationCurve.Linear(1, 1f, 20, 2.5f);
+    [SerializeField] private AnimationCurve _speedMultiplier = AnimationCurve.Linear(1, 1f, 20, 1.5f);
+    [SerializeField] private AnimationCurve _spawnCountMultiplier = AnimationCurve.Linear(1, 1f, 20, 2f);
 
-    [Header("Floor-based enemy HP")]
+    [Header("Base Enemy Stats")]
     [SerializeField] private int _baseEnemyHP = 30;
     [SerializeField] private int _baseEnemyDamage = 10;
 

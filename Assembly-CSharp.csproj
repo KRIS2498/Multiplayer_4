@@ -72,6 +72,7 @@
     <Compile Include="Assets\Scripts\PlayerView.cs" />
     <Compile Include="Assets\Scripts\Tower\RoomType.cs" />
     <Compile Include="Assets\Scripts\PickupManager.cs" />
+    <Compile Include="Assets\Scripts\Tower\StartingRoomTrigger.cs" />
     <Compile Include="Assets\Scripts\Tower\EnemyBase.cs" />
     <Compile Include="Assets\Scripts\Tower\Rooms\BaseRoom.cs" />
     <Compile Include="Assets\FishNet\Upgrading\MirrorUpgrade.cs" />
@@ -84,10 +85,12 @@
     <Compile Include="Assets\Scripts\Tower\TetherManager.cs" />
     <Compile Include="Assets\Scripts\Tower\Rooms\TrapRoom.cs" />
     <Compile Include="Assets\Scripts\PlayerCameraSpawner.cs" />
+    <Compile Include="Assets\Scripts\Tower\FloorDoor.cs" />
     <Compile Include="Assets\Scripts\Tower\Rooms\BossRoom.cs" />
     <Compile Include="Assets\Scripts\Projectile.cs" />
     <Compile Include="Assets\Scripts\PlayerMovementPredicted.cs" />
     <Compile Include="Assets\Scripts\Tower\ScriptableObjects\RoomDatabase.cs" />
+    <Compile Include="Assets\Scripts\Tower\RoomPickup.cs" />
     <Compile Include="Assets\Scripts\Tower\DifficultyManager.cs" />
     <Compile Include="Assets\Scripts\ConnectionUI.cs" />
     <Compile Include="Assets\Scripts\GameManager.cs" />

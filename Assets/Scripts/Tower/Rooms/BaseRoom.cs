@@ -10,8 +10,8 @@ public abstract class BaseRoom : NetworkBehaviour
     [Header("Room Settings")]
     [SerializeField] private RoomType _roomType;
     [SerializeField] protected Transform[] _playerSpawnPoints;
-    [SerializeField] protected Transform _exitDoor;
-    [SerializeField] protected float _autoCloseDelay = 1f;
+    [SerializeField] protected GameObject _exitDoorModel;
+    [SerializeField] protected Collider _exitTrigger;
 
     public RoomType RoomType => _roomType;
     public bool IsCompleted { get; protected set; }
@@ -23,8 +23,12 @@ public abstract class BaseRoom : NetworkBehaviour
     public virtual void InitializeRoom()
     {
         IsCompleted = false;
-        if (_exitDoor != null)
-            _exitDoor.gameObject.SetActive(false);
+
+        if (_exitDoorModel != null)
+            _exitDoorModel.SetActive(true);
+
+        if (_exitTrigger != null)
+            _exitTrigger.enabled = false;
     }
 
     public virtual void OnPlayersEntered(List<PlayerNetwork> players)
@@ -37,10 +41,22 @@ public abstract class BaseRoom : NetworkBehaviour
         if (IsCompleted) return;
         IsCompleted = true;
 
-        if (_exitDoor != null)
-            _exitDoor.gameObject.SetActive(true);
+        if (_exitTrigger != null)
+            _exitTrigger.enabled = true;
 
         OnRoomCompleted?.Invoke(this);
+    }
+
+    public virtual void CleanupRoom() { }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (!base.IsServerInitialized) return;
+        if (!IsCompleted) return;
+        if (_exitTrigger == null) return;
+        if (other.GetComponent<PlayerNetwork>() == null) return;
+
+        TowerManager.Instance?.OnPlayerEnteredExit();
     }
 
     protected virtual void OnDrawGizmosSelected()
@@ -53,6 +69,12 @@ public abstract class BaseRoom : NetworkBehaviour
                 if (sp != null)
                     Gizmos.DrawWireSphere(sp.position, 0.5f);
             }
+        }
+
+        if (_exitTrigger != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireCube(_exitTrigger.bounds.center, _exitTrigger.bounds.size);
         }
     }
 }

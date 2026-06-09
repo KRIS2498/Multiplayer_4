@@ -16,5 +16,5 @@ MonoBehaviour:
   - Type: 0
     Prefab: {fileID: 4902701930139611987, guid: 4656036687037d0488b227b22646b7eb, type: 3}
     MinFloor: 1
-    MaxFloor: 50
-    Weight: 0.6
+    MaxFloor: 999
+    Weight: 1
