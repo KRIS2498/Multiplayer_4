@@ -17,12 +17,10 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private int _winningScore = 10;
     [SerializeField] private float _resultsDisplayTime = 5f;
 
-    [Header("UI Elements (�� Canvas)")]
-    [SerializeField] private GameObject _waitingPanel; // ������ �������� (����� ������ Panel � �������)
+    [Header("UI Elements (under Canvas)")]
+    [SerializeField] private GameObject _waitingPanel;
     [SerializeField] private Text _waitingText;
     [SerializeField] private Text _timerText;
-    [SerializeField] private GameObject _resultsPanel; // ������ �����������
-    [SerializeField] private Text _resultsText;
     [SerializeField] private Text _gameTimerText;
 
     // SyncVars
@@ -450,11 +448,7 @@ public class GameManager : NetworkBehaviour
     [ObserversRpc]
     private void ShowResultsToClients(string results)
     {
-        if (IsClient && _resultsText != null)
-        {
-            _resultsText.text = results;
-            if (_resultsPanel != null) _resultsPanel.SetActive(true);
-        }
+        // Results are now handled by TowerManager
     }
 
     [ObserversRpc]
@@ -463,7 +457,6 @@ public class GameManager : NetworkBehaviour
         if (IsClient)
         {
             Debug.Log("[Client] Returning to lobby...");
-            if (_resultsPanel != null) _resultsPanel.SetActive(false);
             if (_timerText != null) _timerText.text = "";
             UpdateUIByState();
         }
@@ -502,7 +495,6 @@ public class GameManager : NetworkBehaviour
     private void HideAllPanels()
     {
         if (_waitingPanel != null) _waitingPanel.SetActive(false);
-        if (_resultsPanel != null) _resultsPanel.SetActive(false);
         if (_timerText != null) _timerText.text = "";
         if (_gameTimerText != null) _gameTimerText.text = "";
     }
@@ -519,7 +511,6 @@ public class GameManager : NetworkBehaviour
         {
             case GameState.WaitingForPlayers:
                 if (_waitingPanel != null) _waitingPanel.SetActive(true);
-                if (_resultsPanel != null) _resultsPanel.SetActive(false);
                 if (_waitingText != null)
                 {
                     _waitingText.text = $"Waiting for players: {_connectedPlayers.Value}/{_requiredPlayers}";
@@ -532,7 +523,6 @@ public class GameManager : NetworkBehaviour
 
             case GameState.Countdown:
                 if (_waitingPanel != null) _waitingPanel.SetActive(true);
-                if (_resultsPanel != null) _resultsPanel.SetActive(false);
                 if (_waitingText != null)
                 {
                     _waitingText.text = "All players ready!";
@@ -541,12 +531,10 @@ public class GameManager : NetworkBehaviour
 
             case GameState.InProgress:
                 if (_waitingPanel != null) _waitingPanel.SetActive(false);
-                if (_resultsPanel != null) _resultsPanel.SetActive(false);
                 break;
 
             case GameState.ShowingResults:
                 if (_waitingPanel != null) _waitingPanel.SetActive(false);
-                // ResultsPanel ������������ � ShowResultsToClients
                 break;
         }
     }

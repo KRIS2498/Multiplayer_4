@@ -42,6 +42,13 @@ public class TowerManager : NetworkBehaviour
     [SerializeField] private TMPro.TextMeshProUGUI _lobbyStatusText;
     [SerializeField] private TMPro.TextMeshProUGUI _lobbyCountdownText;
 
+    [Header("Results UI")]
+    [SerializeField] private GameObject _resultsPanel;
+    [SerializeField] private TMPro.TextMeshProUGUI _resultsTitleText;
+    [SerializeField] private TMPro.TextMeshProUGUI _resultsFloorText;
+    [SerializeField] private TMPro.TextMeshProUGUI _resultsCoinsText;
+    [SerializeField] private TMPro.TextMeshProUGUI _resultsDeathsText;
+
     private readonly SyncVar<TowerState> _currentState = new(TowerState.Lobby);
     private readonly SyncVar<int> _currentFloor = new(1);
     private readonly SyncVar<int> _bossesKilled = new(0);
@@ -581,7 +588,8 @@ public class TowerManager : NetworkBehaviour
         int coinsEarned = CalculateCoins(reason);
         SaveRunResults(coinsEarned);
 
-        NotifyRunEndedObserversRpc(reason.ToString(), _currentFloor.Value, _bossesKilled.Value, coinsEarned);
+        int floorsCleared = _currentFloor.Value - 1;
+        NotifyRunEndedObserversRpc(reason.ToString(), floorsCleared, _bossesKilled.Value, coinsEarned);
 
         if (_stateCoroutine != null) StopCoroutine(_stateCoroutine);
 
@@ -647,33 +655,76 @@ public class TowerManager : NetworkBehaviour
 
     private void AutoSaveProgress()
     {
-        int currentRecord = LoadBestRecordFromDisk();
-        if (_currentFloor.Value > currentRecord)
+        foreach (var conn in base.ServerManager.Clients.Values)
         {
-            SaveBestRecordToDisk(_currentFloor.Value);
-            _bestFloorRecord.Value = _currentFloor.Value;
+            foreach (var nob in conn.Objects)
+            {
+                var pn = nob.GetComponent<PlayerNetwork>();
+                if (pn != null)
+                {
+                    string nickname = pn.Nickname.Value;
+                    int currentRecord = LoadBestRecordFromDisk(nickname);
+                    if (_currentFloor.Value > currentRecord)
+                    {
+                        SaveBestRecordToDisk(nickname, _currentFloor.Value);
+                        _bestFloorRecord.Value = _currentFloor.Value;
+                    }
+                }
+            }
         }
+    }
+
+    public void LoadPlayerCoins(string nickname, PlayerNetwork pn)
+    {
+        if (!base.IsServerInitialized) return;
+        int saved = LoadCoinsFromDisk(nickname);
+        pn.Coins.Value = saved;
+        Debug.Log($"[Tower] Loaded {saved} coins for {nickname}");
     }
 
     private void SaveRunResults(int coins)
     {
-        int totalCoins = LoadCoinsFromDisk();
-        totalCoins += coins;
-        SaveCoinsToDisk(totalCoins);
-
-        int currentRecord = LoadBestRecordFromDisk();
-        int floorsCleared = _currentFloor.Value - 1;
-        if (floorsCleared > currentRecord)
+        foreach (var conn in base.ServerManager.Clients.Values)
         {
-            SaveBestRecordToDisk(floorsCleared);
-            _bestFloorRecord.Value = floorsCleared;
+            foreach (var nob in conn.Objects)
+            {
+                var pn = nob.GetComponent<PlayerNetwork>();
+                if (pn != null)
+                {
+                    string nickname = pn.Nickname.Value;
+                    int playerCoins = LoadCoinsFromDisk(nickname);
+                    playerCoins += coins;
+                    SaveCoinsToDisk(nickname, playerCoins);
+                    pn.Coins.Value = playerCoins;
+
+                    int currentRecord = LoadBestRecordFromDisk(nickname);
+                    int floorsCleared = _currentFloor.Value - 1;
+                    if (floorsCleared > currentRecord)
+                    {
+                        SaveBestRecordToDisk(nickname, floorsCleared);
+                        _bestFloorRecord.Value = floorsCleared;
+                    }
+                }
+            }
         }
     }
 
     private void LoadBestRecord()
     {
-        int record = LoadBestRecordFromDisk();
-        _bestFloorRecord.Value = record;
+        int best = 0;
+        foreach (var conn in base.ServerManager.Clients.Values)
+        {
+            foreach (var nob in conn.Objects)
+            {
+                var pn = nob.GetComponent<PlayerNetwork>();
+                if (pn != null)
+                {
+                    int record = LoadBestRecordFromDisk(pn.Nickname.Value);
+                    if (record > best) best = record;
+                }
+            }
+        }
+        _bestFloorRecord.Value = best;
     }
 
     private void ResetPlayers()
@@ -689,6 +740,7 @@ public class TowerManager : NetworkBehaviour
                 {
                     pn.HP.Value = 100;
                     pn.IsAlive.Value = true;
+                    pn.Deaths.Value = 0;
                     pn.StopAllCoroutines();
                 }
 
@@ -705,52 +757,66 @@ public class TowerManager : NetworkBehaviour
 
     #region Disk I/O
 
-    private string SavePath => System.IO.Path.Combine(Application.persistentDataPath, "tower_save.json");
+    private string SaveDir => Application.persistentDataPath;
 
     [System.Serializable]
-    private class SaveData
+    private class PlayerSaveData
     {
+        public string Nickname;
         public int Coins;
         public int BestFloor;
     }
 
-    private int LoadCoinsFromDisk()
+    private string GetSavePath(string nickname)
     {
-        var data = LoadSaveData();
-        return data?.Coins ?? 0;
+        string safe = string.IsNullOrEmpty(nickname) ? "default" : nickname.Replace(' ', '_');
+        return System.IO.Path.Combine(SaveDir, $"tower_save_{safe}.json");
     }
 
-    private void SaveCoinsToDisk(int coins)
+    private PlayerSaveData LoadPlayerSave(string nickname)
     {
-        var data = LoadSaveData() ?? new SaveData();
-        data.Coins = coins;
-        System.IO.File.WriteAllText(SavePath, JsonUtility.ToJson(data));
-    }
-
-    private int LoadBestRecordFromDisk()
-    {
-        var data = LoadSaveData();
-        return data?.BestFloor ?? 0;
-    }
-
-    private void SaveBestRecordToDisk(int floor)
-    {
-        var data = LoadSaveData() ?? new SaveData();
-        data.BestFloor = floor;
-        System.IO.File.WriteAllText(SavePath, JsonUtility.ToJson(data));
-    }
-
-    private SaveData LoadSaveData()
-    {
-        if (!System.IO.File.Exists(SavePath)) return null;
+        string path = GetSavePath(nickname);
+        if (!System.IO.File.Exists(path)) return null;
         try
         {
-            return JsonUtility.FromJson<SaveData>(System.IO.File.ReadAllText(SavePath));
+            return JsonUtility.FromJson<PlayerSaveData>(System.IO.File.ReadAllText(path));
         }
         catch
         {
             return null;
         }
+    }
+
+    private void SavePlayerData(string nickname, PlayerSaveData data)
+    {
+        string path = GetSavePath(nickname);
+        System.IO.File.WriteAllText(path, JsonUtility.ToJson(data));
+    }
+
+    private int LoadCoinsFromDisk(string nickname)
+    {
+        var data = LoadPlayerSave(nickname);
+        return data?.Coins ?? 0;
+    }
+
+    private void SaveCoinsToDisk(string nickname, int coins)
+    {
+        var data = LoadPlayerSave(nickname) ?? new PlayerSaveData { Nickname = nickname };
+        data.Coins = coins;
+        SavePlayerData(nickname, data);
+    }
+
+    private int LoadBestRecordFromDisk(string nickname)
+    {
+        var data = LoadPlayerSave(nickname);
+        return data?.BestFloor ?? 0;
+    }
+
+    private void SaveBestRecordToDisk(string nickname, int floor)
+    {
+        var data = LoadPlayerSave(nickname) ?? new PlayerSaveData { Nickname = nickname };
+        data.BestFloor = floor;
+        SavePlayerData(nickname, data);
     }
 
     #endregion
@@ -834,12 +900,73 @@ public class TowerManager : NetworkBehaviour
     private void NotifyRunEndedObserversRpc(string reason, int floor, int bosses, int coins)
     {
         Debug.Log($"[Tower] Run ended: {reason}, Floor: {floor}, Bosses: {bosses}, Coins: {coins}");
+        ShowResults(floor, coins);
     }
 
     [ObserversRpc]
     private void NotifyReturnToLobbyObserversRpc()
     {
         Debug.Log("[Tower] Returned to lobby");
+    }
+
+    private void ShowResults(int floorsCleared, int coinsEarned)
+    {
+        if (_resultsPanel == null) return;
+
+        _resultsPanel.SetActive(true);
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (_resultsTitleText != null)
+            _resultsTitleText.text = "RUN COMPLETE";
+
+        if (_resultsFloorText != null)
+            _resultsFloorText.text = $"Floors cleared: {floorsCleared}";
+
+        if (_resultsCoinsText != null)
+            _resultsCoinsText.text = $"Coins earned: {coinsEarned}";
+
+        if (_resultsDeathsText != null)
+        {
+            var localPlayer = GetLocalPlayerNetwork();
+            int deaths = localPlayer != null ? localPlayer.Deaths.Value : 0;
+            _resultsDeathsText.text = $"Deaths: {deaths}";
+        }
+    }
+
+    public void CloseResults()
+    {
+        HideResults();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    private void HideResults()
+    {
+        if (_resultsPanel != null)
+            _resultsPanel.SetActive(false);
+    }
+
+    private PlayerNetwork GetLocalPlayerNetwork()
+    {
+        foreach (var conn in base.ServerManager.Clients.Values)
+        {
+            foreach (var nob in conn.Objects)
+            {
+                var pn = nob.GetComponent<PlayerNetwork>();
+                if (pn != null && pn.Owner.IsLocalClient)
+                    return pn;
+            }
+        }
+
+        foreach (var pn in FindObjectsOfType<PlayerNetwork>())
+        {
+            if (pn.Owner.IsLocalClient)
+                return pn;
+        }
+
+        return null;
     }
 
     [ObserversRpc]

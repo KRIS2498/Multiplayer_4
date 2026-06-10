@@ -11,6 +11,9 @@ public class PlayerNetwork : NetworkBehaviour
     public readonly SyncVar<string> Nickname = new("Player");
     public readonly SyncVar<int> HP = new(100);
     public readonly SyncVar<bool> IsAlive = new(true);
+    public readonly SyncVar<int> Score = new(0);
+    public readonly SyncVar<int> Deaths = new(0);
+    public readonly SyncVar<int> Coins = new(0);
 
     [Header("UI World Space")]
     [SerializeField] private TextMeshPro _nicknameText;
@@ -19,6 +22,7 @@ public class PlayerNetwork : NetworkBehaviour
     [Header("Screen UI")]
     private TextMeshProUGUI _healthScreenText;
     private TextMeshProUGUI _ammoScreenText;
+    private TextMeshProUGUI _coinsScreenText;
 
     // ������ �� ������ �������� ��� ��������
     private PlayerShooting _playerShooting;
@@ -26,7 +30,6 @@ public class PlayerNetwork : NetworkBehaviour
     private GameObject _respawnPanel;
     private TextMeshProUGUI _respawnText;
     private Coroutine _respawnTimerCoroutine;
-    public readonly SyncVar<int> Score = new(0);
 
     private void Start()
     {
@@ -52,13 +55,17 @@ public class PlayerNetwork : NetworkBehaviour
                 _healthScreenText.gameObject.SetActive(true);
             if (_ammoScreenText != null)
                 _ammoScreenText.gameObject.SetActive(true);
+            if (_coinsScreenText != null)
+                _coinsScreenText.gameObject.SetActive(true);
         }
 
         UpdateNicknameUI(Nickname.Value);
         UpdateHPUI(HP.Value);
         UpdateHealthScreenUI(HP.Value);
-        
-        // ������������� �� ������� �� PlayerShooting
+        UpdateCoinsScreenUI(Coins.Value);
+
+        Coins.OnChange += OnCoinsChanged;
+
         _playerShooting = GetComponent<PlayerShooting>();
         if (_playerShooting != null && base.Owner.IsLocalClient)
         {
@@ -69,8 +76,6 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void FindScreenUI()
     {
-        if (_healthScreenText != null && _ammoScreenText != null) return;
-
         Canvas canvas = FindObjectOfType<Canvas>();
         if (canvas == null) return;
 
@@ -86,6 +91,13 @@ public class PlayerNetwork : NetworkBehaviour
             Transform ammoTransform = canvas.transform.Find("AmmoText");
             if (ammoTransform != null)
                 _ammoScreenText = ammoTransform.GetComponent<TextMeshProUGUI>();
+        }
+
+        if (_coinsScreenText == null)
+        {
+            Transform coinsTransform = canvas.transform.Find("CoinsText");
+            if (coinsTransform != null)
+                _coinsScreenText = coinsTransform.GetComponent<TextMeshProUGUI>();
         }
     }
 
@@ -154,6 +166,20 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    private void OnCoinsChanged(int oldValue, int newValue, bool asServer)
+    {
+        UpdateCoinsScreenUI(newValue);
+    }
+
+    private void UpdateCoinsScreenUI(int coins)
+    {
+        if (_coinsScreenText != null && base.Owner.IsLocalClient)
+        {
+            _coinsScreenText.text = $"COINS: {coins}";
+            _coinsScreenText.color = new Color(1f, 0.84f, 0f);
+        }
+    }
+
     [ServerRpc(RequireOwnership = false)]
     private void SubmitNicknameServerRpc(string nickname)
     {
@@ -162,6 +188,9 @@ public class PlayerNetwork : NetworkBehaviour
             : nickname.Trim();
         Nickname.Value = safeValue;
         Debug.Log($"Player {base.Owner.ClientId} set nickname: {safeValue}");
+
+        if (TowerManager.Instance != null)
+            TowerManager.Instance.LoadPlayerCoins(safeValue, this);
     }
 
     private void OnNicknameChanged(string oldValue, string newValue, bool asServer)
@@ -182,14 +211,18 @@ public class PlayerNetwork : NetworkBehaviour
         if (base.IsServerInitialized && newValue <= 0 && IsAlive.Value)
         {
             IsAlive.Value = false;
+            Deaths.Value++;
             Debug.Log($"Player {Nickname.Value} DIED! Killer: {_lastAttackerId}");
 
             OnAnyPlayerDied?.Invoke(this);
 
-            GameManager gm = FindObjectOfType<GameManager>();
-            if (gm != null && _lastAttackerId != -1)
+            if (TowerManager.Instance == null)
             {
-                gm.OnPlayerKilled(_lastAttackerId, base.Owner.ClientId);
+                GameManager gm = FindObjectOfType<GameManager>();
+                if (gm != null && _lastAttackerId != -1)
+                {
+                    gm.OnPlayerKilled(_lastAttackerId, base.Owner.ClientId);
+                }
             }
 
             TowerManager.Instance?.CheckAllPlayersDead();
@@ -412,7 +445,8 @@ public class PlayerNetwork : NetworkBehaviour
         Nickname.OnChange -= OnNicknameChanged;
         HP.OnChange -= OnHpChanged;
         IsAlive.OnChange -= OnIsAliveChanged;
-        
+        Coins.OnChange -= OnCoinsChanged;
+
         if (_playerShooting != null && base.Owner.IsLocalClient)
         {
             _playerShooting.OnAmmoChanged -= UpdateAmmoScreenUI;
